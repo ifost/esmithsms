@@ -1,0 +1,42 @@
+#!/bin/sh
+#
+# Based on something from the UTS programming society.
+# Modified 2001 Greg Baker
+# Consider this public domain
+
+PATH=/bin:/usr/bin:/usr/local/bin
+
+DEVNAME=$1
+TARGET=$2
+MSG="$(cat)"   
+rm .email2sms.log
+
+SMS_NUMBER=0418707767
+#TTYPARM="2400 cs8 cstopb -parenb"
+TTYPARM="19200 cs8 cstopb -parenb"
+
+LOCKFILE=/var/lock/LCK..$DEVNAME
+DEV=/dev/$DEVNAME
+
+let COUNT=0
+while  [ -e $LOCKFILE ]
+do
+  sleep 59
+  let COUNT=COUNT+1
+  if [ $COUNT = 30 ]
+  then
+     exit 1
+  fi
+done
+
+echo "   $$" > $LOCKFILE  # this isn't atomic, but it's good enough =8^)!!
+echo $$
+
+#stty $TTYPARM > $DEV < $DEV
+stty $TTYPARM > $DEV
+
+
+/usr/sbin/chat -v REPORT CONNECT ABORT BUSY ABORT 'NO DIALTONE' ABORT 'NO CARRIER' '' ATZ OK "\\dATDT${SMS_NUMBER}" CONNECT '' 'QUIT)' "$TARGET\\n" "KEY" "$MSG" "BEING SENT" "ATH" > $DEV < $DEV
+
+
+rm $LOCKFILE
