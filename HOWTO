@@ -1,0 +1,92 @@
+#!/bin/bash
+######### HOWTO (and shell script sort-of) for getting SMS to work 
+######### on Mitel E-smith 5
+# 0.  
+#  Make a directory to work from.  Decide what modem line to use
+# (ttyS0 is used here by default).
+
+mkdir -p /root/smssetup
+cd /root/smssetup
+
+MODEM_DEVICE="/dev/ttyS0"
+
+#####################################################################
+# 1.
+#  Download email2sms.tar.gz  from 
+#  http://www.new.ox.ac.uk/~adam/computing/email2sms/
+
+wget http://www.new.ox.ac.uk/~adam/computing/email2sms/email2sms.tar.gz
+mkdir -p email2sms
+cd email2sms
+tar xvfz email2sms.tar.gz
+cd ..
+
+#####################################################################
+# 2.
+#   To use CPAN,  you need make... (this next command only works in Australia)
+
+wget http://mirror.aarnet.edu.au/pub/redhat/redhat-7.1/en/os/i386/RedHat/RPMS/make-3.79.1-5.i386.rpm
+
+
+#####################################################################
+# 3.
+#   Get the dependancies.  This will ask a lot of CPAN first-time
+#  questions.  I had problems because it kept wanting to upgrade to
+#  Perl 5.6.1;  I don't know why.
+
+perl -MCPAN -e 'install MIME::Entity'
+perl -MCPAN -e 'install Lingua::EN::Squeeze'
+
+
+#####################################################################
+# 4.
+#   Patch Lingua::EN::Squeeze
+
+cd /usr/lib/perl5/site_perl/5.6.0/Lingua/EN   
+patch < /root/smssetup/email2sms/Lingua.patch   
+cd /root/smssetup
+
+
+#####################################################################
+# 5. 
+#   Get the actual SMS sender (calls a Telstra number from anywhere
+#  in Australia for the cost of a local call).
+
+wget http://www.ifost.org.au/~gregb/programs/sendsms
+cp sendsms /usr/local/bin
+chmod +x /usr/local/bin/sendsms
+
+
+#####################################################################
+# 6.
+#  Put the email2sms script in place
+#
+cp /root/smssetup/email2sms/email2sms /usr/local/bin
+chmod +x /usr/local/bin/email2sms
+cp /root/smssetup/email2sms/sample.email2smsrc /etc/email2sms.conf
+
+#####################################################################
+# 7.
+#   For each user that is supposed to have an SMS-able email address,
+#  create a .qmail-sms file.
+
+USERS=$(grep -v '#' /home/e-smith/accounts| grep '=user|' | cut -f1 -d=)
+for user in  $USERS
+do
+  PHONENUM=$(grep "^$user=" /home/e-smith/accounts | sed -e 's/.*Phone|//' -e 's/|.*//' -e 's/ //g')
+  echo "| /usr/local/bin/email2sms -f /etc/email2sms.conf | /usr/local/bin/sendsms $MODEM_DEVICE $PHONENUM" > /home/e-smith/files/users/$user/.qmail-sms
+done
+
+
+#####################################################################
+# 8.
+#  Hmm, at the moment,  the only way I can get this to work is to
+# open up the permissions waaaaaay wide.  But since no-one actually
+# ever logs into an e-smit system,  maybe this is OK.
+# 
+# In the future I'll fix this by writing a suid Perl script which
+# lets /usr/sbin/chat work.
+
+chmod a+rwx /dev/ttyS0
+chmod a+rwx /var/lock
+
